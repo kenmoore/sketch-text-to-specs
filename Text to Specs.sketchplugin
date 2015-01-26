@@ -1,0 +1,181 @@
+// Text to Specs Plugin (cmd shift a)
+/*
+  Author: Ken Moore
+
+  The Text to Specs plugin lets you easily turn a text layer into a 'specs' layer (text
+  with shared text style 'Specs text', with a background bounding rectangle that has 15px
+  padding and shared style 'Specs background'. Additionally, if the text is later altered 
+  and/or resized, the plugin may be invoked to re-fit the bounding rectangle.
+*/
+
+var textLayer = nil;
+var rectLayer = nil;
+var groupLayer = nil;
+
+// Display an error alert
+function alert(msg, title) {
+  title = title || "alert";
+  var app = [NSApplication sharedApplication];
+  [app displayDialog:msg withTitle:title];
+}
+
+// Determine if a layer is an artboard
+function isArtboard(layer) {
+  var artboards = [[doc currentPage] artboards];
+  for (var i = 0; i < [artboards length]; i++) {
+    if ([artboards objectAtIndex: i] == layer) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// Display an error alert and exit
+function invalidSelection(details) {
+  text = 'Select the text layer you wish to convert to a spec, or the group layer you wish to re-layout.';
+  if (details) text += ' [' + details + ']';
+  alert(text, 'Select text layer');
+  throw(nil); // exit the plugin
+}
+
+// Validate selection, and assign proper layers to textLayer, rectLayer and groupLayer
+function initSelection() {
+  // Ensure there's only one layer selected
+  if ([selection count] != 1) {
+    invalidSelection('One layer must be selected');
+  }
+
+  layer = [selection objectAtIndex:0];
+
+  // Assign / create layers to achieve group layer containing text + background layers
+  if (layer instanceof MSLayerGroup) {
+    groupLayer = layer;
+
+    // If group is selected, only consider it valid if it has a text layer with a rect layer below
+    children = [groupLayer layers];
+    if ([children count] == 2) {
+      textLayer = [children lastObject];
+      rectLayer = [children firstObject];
+
+      if (!(textLayer instanceof MSTextLayer) || rectLayer instanceof MSTextLayer) {
+        invalidSelection('Group must contain a text layer with a rectangle layer below');
+      }
+    } else {
+      invalidSelection('Group must contain only a text layer with a rectangle layer below');
+    }
+  } else if (layer instanceof MSTextLayer) {
+    textLayer = layer;
+
+    // If already inside a group, use that group, otherwise create a new one with rect layer
+    groupLayer = [textLayer parentGroup];
+
+    if (groupLayer && !(groupLayer instanceof MSPage) && !isArtboard(groupLayer)) {
+      children = [groupLayer layers];
+      if ([children count] == 2) {
+        rectLayer = [children firstObject];
+      } else {
+        invalidSelection('zGroup must contain only a text layer with a rectangle layer below');
+      }
+    } else {
+      page = [doc currentPage];
+
+      // create the group layer
+      groupLayer = MSLayerGroup.new();
+      page.addLayers([groupLayer]);
+
+      // create the background layer
+      rect = [groupLayer addLayerOfType: 'rectangle'];
+      rect.name = 'spec background';
+      rectLayer = rect.embedInShapeGroup();
+
+      // insert textLayer into group
+      page.removeLayer(textLayer);
+      groupLayer.addLayers([textLayer]);
+    }
+  } else {
+    invalidSelection();
+  }
+}
+
+
+// Create shared style for specs text if it doesn't exist yet
+function initTextSharedStyle() {
+  var textStyles = doc.documentData().layerTextStyles();
+  var textStylesLibrary = textStyles.objectsSortedByName();
+
+  // loop through existing text styles, if "Specs text" already exists apply it and return
+  for (var i = 0; i < [textStylesLibrary length]; i++) {
+    if (textStylesLibrary[i].name() == 'Specs text') {
+      [textLayer setIsEditingText:false];
+      textLayer.setStyle(textStylesLibrary[i].newInstance());
+      return;
+    }
+  }
+
+  // "Specs text" style doesn't exist, create it from current layer
+  // But first, set the current text color to nearly-white
+  var color = MSColor.colorWithSVGString("#FFFFFF");
+  [textLayer setTextColor: color];
+  textLayer.style().shadows().addNewStylePart();
+
+  textStyles.addSharedStyleWithName_firstInstance("Specs text", textLayer.style());
+}
+
+// Create shared style for specs background rect if it doesn't exist yet
+function initRectSharedStyle() {
+  var layerStyles = doc.documentData().layerStyles();
+  var layerStylesLibrary = layerStyles.objectsSortedByName();
+
+  // loop through existing styles, if "Specs background" already exists apply it and return
+  for (var i = 0; i < [layerStylesLibrary length]; i++) {
+    if (layerStylesLibrary[i].name() == 'Specs background') {  
+      rectLayer.setStyle(layerStylesLibrary[i].newInstance());
+      return;
+    }
+  }
+
+  // "Specs background" style doesn't exist, create it
+  var style = MSStyle.alloc().init();
+
+  // Setup fill.
+  var fill = style.fills().addNewStylePart();
+  fill.color = MSColor.colorWithSVGString("#000000");
+
+  // Setup shadow with default settings.
+  style.shadows().addNewStylePart();
+
+  // Add style to the container of shared styles.
+  layerStyles.addSharedStyleWithName_firstInstance("Specs background", style);
+
+  // Apply the style to rectLayer
+  [rectLayer setStyle: style];
+}
+
+function resizeBackground(padding) {
+  var textFrame = [textLayer frame];
+  var rectFrame = [rectLayer frame];
+  [rectFrame setX: [textFrame x] - padding]; 
+  [rectFrame setY: [textFrame y] - padding]; 
+  [rectFrame setWidth: [textFrame width] + padding * 2]; 
+  [rectFrame setHeight: [textFrame height] + padding * 2]; 
+  groupLayer.resizeRoot(true); // resize the group layer to match new contents
+}
+
+
+// MAIN
+
+// validate selection, and assign proper layers to textLayer, rectLayer and groupLayer
+initSelection();
+
+// Create shared style for specs text if it doesn't exist yet
+initTextSharedStyle();
+
+// Create shared style for specs background rect if it doesn't exist yet
+initRectSharedStyle();
+
+// Set the name of the group layer to 'specs' so it can be targeted with toggle visibility plugin
+[groupLayer setName: "specs: " + textLayer.stringValue().substr(0,20) + (textLayer.stringValue().length() > 20 ? '...' : '')];
+
+// Resize the rect to wrap the text, specifying px of padding
+resizeBackground(15);
