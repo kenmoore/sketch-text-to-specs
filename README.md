@@ -1,7 +1,7 @@
 # Text to Specs plugin for Sketch
 Convert a text layer into a styled annotation overlay, grouped with a styled rectangle background.
 
-Here's a [quick video demo](https://www.youtube.com/watch?v=) showing how it's used.
+Here's a [quick video demo](https://www.youtube.com/watch?v=gntOFEGyCVk).
 
 Creating an Annotation
 Simply select a text layer and press Cmd+Ctrl+T.
