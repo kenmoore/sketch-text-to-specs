@@ -1,12 +1,19 @@
-// Text to Specs Plugin (cmd shift a)
+// Text to Specs Plugin (cmd ctrl t)
 /*
   Author: Ken Moore
 
-  The Text to Specs plugin lets you easily turn a text layer into a 'specs' layer (text
-  with shared text style 'Specs text', with a background bounding rectangle that has 15px
-  padding and shared style 'Specs background'. Additionally, if the text is later altered 
-  and/or resized, the plugin may be invoked to re-fit the bounding rectangle.
+  The Text to Specs plugin lets you easily turn a text layer into a 'specs' layer (grouped
+  with a background bounding rectangle w/ 15px padding). If you later edit the text, you
+  can invoke the plugin again to re-fit the background layer.
+
+  Since the text and background use shared styles, it's easy to change the style of all
+  annotations to suit your preference.
+
+  PRO TIP: Since the group layer name begins with "specs", you can use the Toggle Specs
+  plugin to quickly toggle all annotations off and on.  
+  (https://github.com/hrescak/sketchplugins)
 */
+
 
 var textLayer = nil;
 var rectLayer = nil;
@@ -75,14 +82,13 @@ function initSelection() {
       if ([children count] == 2) {
         rectLayer = [children firstObject];
       } else {
-        invalidSelection('zGroup must contain only a text layer with a rectangle layer below');
+        invalidSelection('Group must contain only a text layer with a rectangle layer below');
       }
     } else {
-      page = [doc currentPage];
-
       // create the group layer
       groupLayer = MSLayerGroup.new();
-      page.addLayers([groupLayer]);
+      parent = textLayer.parentGroup();
+      parent.addLayers([groupLayer]);
 
       // create the background layer
       rect = [groupLayer addLayerOfType: 'rectangle'];
@@ -90,7 +96,7 @@ function initSelection() {
       rectLayer = rect.embedInShapeGroup();
 
       // insert textLayer into group
-      page.removeLayer(textLayer);
+      parent.removeLayer(textLayer);
       groupLayer.addLayers([textLayer]);
     }
   } else {
@@ -107,19 +113,24 @@ function initTextSharedStyle() {
   // loop through existing text styles, if "Specs text" already exists apply it and return
   for (var i = 0; i < [textStylesLibrary length]; i++) {
     if (textStylesLibrary[i].name() == 'Specs text') {
+      [textLayer finishEditing];
       [textLayer setIsEditingText:false];
+      print('just set editing false');
       textLayer.setStyle(textStylesLibrary[i].newInstance());
       return;
     }
   }
 
   // "Specs text" style doesn't exist, create it from current layer
-  // But first, set the current text color to nearly-white
-  var color = MSColor.colorWithSVGString("#FFFFFF");
+  // But first, set the current text color to mid gray
+  var color = MSColor.colorWithSVGString("#6C6C6C");
   [textLayer setTextColor: color];
-  textLayer.style().shadows().addNewStylePart();
-
   textStyles.addSharedStyleWithName_firstInstance("Specs text", textLayer.style());
+}
+
+// Restore the text style (color, shadow) to what it was prior to invoking the plugin
+ function restoreTextStyle() {
+  
 }
 
 // Create shared style for specs background rect if it doesn't exist yet
@@ -138,12 +149,24 @@ function initRectSharedStyle() {
   // "Specs background" style doesn't exist, create it
   var style = MSStyle.alloc().init();
 
-  // Setup fill.
+  // Setup fill
   var fill = style.fills().addNewStylePart();
-  fill.color = MSColor.colorWithSVGString("#000000");
+  fill.color = MSColor.colorWithSVGString("#FFFCDC");
+
+  // Setup stroke
+  var border = style.borders().addNewStylePart();
+  border.color = MSColor.colorWithSVGString("#CCCCCC");
+  border.thickness = 1;
 
   // Setup shadow with default settings.
-  style.shadows().addNewStylePart();
+  var shadow = style.shadows().addNewStylePart();
+  shadow.offsetX = 0;
+  shadow.offsetY = 1;
+  shadow.blurRadius = 0;
+  shadow.spread = 0;
+  var shadowColor = MSColor.colorWithSVGString("#000000");
+  shadowColor.alpha = 0.2;
+  shadow.color = shadowColor;
 
   // Add style to the container of shared styles.
   layerStyles.addSharedStyleWithName_firstInstance("Specs background", style);
@@ -179,3 +202,10 @@ initRectSharedStyle();
 
 // Resize the rect to wrap the text, specifying px of padding
 resizeBackground(15);
+
+// Select the group layer
+textLayer.setIsSelected(false);
+groupLayer.setIsSelected(true);
+
+// Restore the prior text style
+restoreTextStyle();
