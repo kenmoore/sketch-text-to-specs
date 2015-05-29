@@ -91,10 +91,12 @@ function initSelection() {
       parent.addLayers([groupLayer]);
 
       // create the background layer
-      rect = [groupLayer addLayerOfType: 'rectangle'];
-      rect.name = 'spec background';
-      rectLayer = rect.embedInShapeGroup();
-
+      var rectShape = MSRectangleShape.alloc().init();
+      rectShape.frame = MSRect.rectWithRect(NSMakeRect(0, 0, 100, 100));
+      rectLayer = [MSShapeGroup shapeWithPath: rectShape];
+      rectLayer.name = 'spec background';
+      groupLayer.addLayers([rectLayer]);
+      
       // insert textLayer into group
       parent.removeLayer(textLayer);
       groupLayer.addLayers([textLayer]);
